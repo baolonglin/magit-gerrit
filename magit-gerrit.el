@@ -4,6 +4,7 @@
 ;;
 ;; Author: Brian Fransioli <assem@terranpro.org>
 ;; URL: https://github.com/terranpro/magit-gerrit
+;; Package-Version: 20160226.130
 ;; Package-Requires: ((magit "2.3.1"))
 ;;
 ;; This program is free software; you can redistribute it and/or
@@ -91,6 +92,12 @@
 (defvar-local magit-gerrit-remote "origin"
   "Default remote name to use for gerrit (e.g. \"origin\", \"gerrit\")")
 
+(defvar-local magit-gerrit-current-commit-change-id nil
+  "Current commit's change id")
+
+(defvar-local magit-gerrit-show-all-open-patchsets-flag nil
+  "Show all open patchsets under reviews section, only show current commmit and owned patchset default")
+
 (defcustom magit-gerrit-popup-prefix (kbd "R")
   "Key code to open magit-gerrit popup"
   :group 'magit-gerrit
@@ -113,10 +120,15 @@
   (gerrit-command "query"
 		  "--format=JSON"
 		  "--all-approvals"
-		  "--comments"
+		  ;;"--comments"
 		  "--current-patch-set"
 		  (concat "project:" prj)
-		  (concat "status:" (or status "open"))))
+		  (concat "status:" (or status "open"))
+                  (or magit-gerrit-show-all-open-patchsets-flag
+                      (concat "owner:" (magit-gerrit-user-id))
+                      (when magit-gerrit-current-commit-change-id (concat "OR change:" magit-gerrit-current-commit-change-id))
+                      )
+                  ))
 
 (defun gerrit-review ())
 
@@ -141,17 +153,19 @@
 		  (if msg msg "") rev))
 
 (defun magit-gerrit-get-remote-url ()
-  (magit-git-string "ls-remote" "--get-url" magit-gerrit-remote))
+  (magit-git-string "config" "--get" (concat "remote." magit-gerrit-remote ".pushurl")))
+;;(magit-git-string "ls-remote" "--get-url" magit-gerrit-remote)
 
 (defun magit-gerrit-get-project ()
- (let* ((regx (rx (zero-or-one ?:) (zero-or-more (any digit)) ?/
-		  (group (not (any "/")))
-		  (group (one-or-more (not (any "."))))))
-	(str (or (magit-gerrit-get-remote-url) ""))
-	(sstr (car (last (split-string str "//")))))
-   (when (string-match regx sstr)
-     (concat (match-string 1 sstr)
-	     (match-string 2 sstr)))))
+  (let* ((regx (rx (zero-or-one ?:) (zero-or-more (any digit)) ?/
+                   (group (not (any "/")))
+                   (group (one-or-more (not (any "."))))))
+         (str (or (magit-gerrit-get-remote-url) ""))
+         (sstr (car (last (split-string str "//")))))
+    (message (format "get project %s" sstr))
+    (when (string-match regx sstr)
+      (concat (match-string 1 sstr)
+              (match-string 2 sstr)))))
 
 (defun magit-gerrit-string-trunc (str maxlen)
   (if (> (length str) maxlen)
@@ -334,10 +348,47 @@ Succeed even if branch already exist
   (interactive)
   (magit-gerrit-copy-review t))
 
+(defun magit-gerrit-user-id ()
+  (save-match-data
+    (when (string-match "\\`\\([^@]+\\)@\\([^@]+\\)\\'" magit-gerrit-ssh-creds)
+      (match-string 1 magit-gerrit-ssh-creds)
+      ))
+  )
+
+(defun magit-gerrit-wash-change-id ()
+  (let* ((beg (point))
+	 (end (point-max))
+         )
+    (when (search-forward "Change-Id: " nil t)
+      (set (make-local-variable 'magit-gerrit-current-commit-change-id)
+           (buffer-substring-no-properties (point) (line-end-position))
+	   )
+      (message (format "Find change-id: %s" magit-gerrit-current-commit-change-id)))
+    (if (and beg end)
+	(delete-region beg end))
+    )
+  )
+
+(defun magit-gerrit-wash-commit-message (args)
+  (magit-wash-sequence #'magit-gerrit-wash-change-id)
+  )
+
+(cl-defun magit-gerrit-get-current-summary
+    (&optional (branch (magit-get-current-branch)))
+  "Get current BRANCH's last commit's change id."
+  (let ((branch (or branch "HEAD")))
+    (magit-git-wash 'magit-gerrit-wash-commit-message "show" "--no-patch"
+                    "--format=%b"
+                    (if branch (concat branch "^{commit}") "HEAD") "--")
+    )
+  )
+
 (defun magit-insert-gerrit-reviews ()
   (magit-gerrit-section 'gerrit-reviews
-			"Reviews:" 'magit-gerrit-wash-reviews
-			(gerrit-query (magit-gerrit-get-project))))
+                        "Reviews:" 'magit-gerrit-wash-reviews
+                        (gerrit-query (magit-gerrit-get-project))
+                        )
+  )
 
 (defun magit-gerrit-add-reviewer ()
   (interactive)
@@ -492,6 +543,17 @@ Succeed even if branch already exist
 
 (defun magit-gerrit-create-branch (branch parent))
 
+(defun magit-gerrit-toggle-show-all-open-patchsets ()
+  (if magit-gerrit-show-all-open-patchsets-flag
+      (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
+           nil
+	   )
+    (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
+         t
+         )
+    )
+  )
+
 (magit-define-popup magit-gerrit-popup
   "Popup console for magit gerrit commands."
   'magit-gerrit
@@ -507,7 +569,10 @@ Succeed even if branch already exist
 	     (?S "Submit Review"                                   magit-gerrit-submit-review)
 	     (?B "Abandon Review"                                  magit-gerrit-abandon-review)
 	     (?b "Browse Review"                                   magit-gerrit-browse-review))
-  :options '((?m "Comment"                      "--message "       magit-gerrit-read-comment)))
+  :options '((?m "Comment"                      "--message "       magit-gerrit-read-comment)
+             (?a "Toggle Show All Open Patchsets"
+                 (if magit-gerrit-show-all-open-patchsets-flag "enable" "disable")
+                 magit-gerrit-toggle-show-all-open-patchsets)))
 
 ;; Attach Magit Gerrit to Magit's default help popup
 (magit-define-popup-action 'magit-dispatch-popup (string-to-char magit-gerrit-popup-prefix) "Gerrit"
