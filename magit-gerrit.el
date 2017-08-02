@@ -544,9 +544,9 @@ Succeed even if branch already exist
 
 (defun magit-gerrit-toggle-show-all-open-patchsets ()
   (if magit-gerrit-show-all-open-patchsets-flag
-      (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
-           nil
-	   )
+    (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
+         nil
+         )
     (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
          t
          )
@@ -567,11 +567,9 @@ Succeed even if branch already exist
 	     (?D "Download Patchset"                               magit-gerrit-download-patchset)
 	     (?S "Submit Review"                                   magit-gerrit-submit-review)
 	     (?B "Abandon Review"                                  magit-gerrit-abandon-review)
-	     (?b "Browse Review"                                   magit-gerrit-browse-review))
-  :options '((?m "Comment"                      "--message "       magit-gerrit-read-comment)
-             (?a "Toggle Show All Open Patchsets"
-                 (if magit-gerrit-show-all-open-patchsets-flag "enable" "disable")
-                 magit-gerrit-toggle-show-all-open-patchsets)))
+	     (?b "Browse Review"                                   magit-gerrit-browse-review)
+             (?a "Show all open Patchsets"                         magit-gerrit-toggle-show-all-open-patchsets))
+  :options '((?m "Comment"                      "--message "       magit-gerrit-read-comment)))
 
 ;; Attach Magit Gerrit to Magit's default help popup
 (magit-define-popup-action 'magit-dispatch-popup (string-to-char magit-gerrit-popup-prefix) "Gerrit"
