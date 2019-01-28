@@ -95,7 +95,7 @@
 (defvar-local magit-gerrit-current-commit-change-id nil
   "Current commit's change id")
 
-(defvar-local magit-gerrit-show-all-open-patchsets-flag nil
+(defvar-local magit-gerrit-show-all-open-patchsets-flag t
   "Show all open patchsets under reviews section, only show current commmit and owned patchset default")
 
 (defcustom magit-gerrit-popup-prefix (kbd "R")
@@ -124,11 +124,11 @@
 		  "--current-patch-set"
 		  (concat "project:" prj)
 		  (concat "status:" (or status "open"))
-                  (or magit-gerrit-show-all-open-patchsets-flag
-                      (concat "owner:" (magit-gerrit-user-id))
-                      (when magit-gerrit-current-commit-change-id (concat "OR change:" magit-gerrit-current-commit-change-id))
-                      )
-                  ))
+                  ;; (concat "reviewer:" (magit-gerrit-user-id))
+                  (concat (if magit-gerrit-show-all-open-patchsets-flag "reviewer:" "owner:") (magit-gerrit-user-id))
+                  )
+  ;; (when magit-gerrit-current-commit-change-id (concat "OR change:" magit-gerrit-current-commit-change-id))
+  )
 
 (defun gerrit-review ())
 
@@ -543,10 +543,11 @@ Succeed even if branch already exist
 (defun magit-gerrit-create-branch (branch parent))
 
 (defun magit-gerrit-toggle-show-all-open-patchsets ()
+  (interactive)
   (if magit-gerrit-show-all-open-patchsets-flag
-    (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
-         nil
-         )
+      (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
+           nil
+           )
     (set (make-local-variable 'magit-gerrit-show-all-open-patchsets-flag)
          t
          )
@@ -568,7 +569,7 @@ Succeed even if branch already exist
 	     (?S "Submit Review"                                   magit-gerrit-submit-review)
 	     (?B "Abandon Review"                                  magit-gerrit-abandon-review)
 	     (?b "Browse Review"                                   magit-gerrit-browse-review)
-             (?a "Show all open Patchsets"                         magit-gerrit-toggle-show-all-open-patchsets))
+             (?a "Toggle own/review Patchsets"                     magit-gerrit-toggle-show-all-open-patchsets))
   :options '((?m "Comment"                      "--message "       magit-gerrit-read-comment)))
 
 ;; Attach Magit Gerrit to Magit's default help popup
